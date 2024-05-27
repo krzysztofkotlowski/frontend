@@ -13,12 +13,12 @@ import {
   Fab,
   useMediaQuery,
   ThemeProvider,
-  Button,
   Modal,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
+  Button,
 } from "@mui/material";
 import { Add, FilterList, Palette, Category } from "@mui/icons-material";
 import { Link, Route, Routes } from "react-router-dom";
@@ -47,14 +47,41 @@ const App: React.FC = () => {
     useState<boolean>(false);
   const [filterStatusModalOpen, setFilterStatusModalOpen] =
     useState<boolean>(false);
+  const [authenticated, setAuthenticated] = useState<boolean>(false);
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const apiUrl = process.env.REACT_APP_API_URL;
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchData();
-  }, [filterStatus]);
+    checkLogin();
+  }, []);
+
+  useEffect(() => {
+    if (authenticated) {
+      fetchData();
+    }
+  }, [authenticated, filterStatus]);
+
+  const checkLogin = async () => {
+    // Check if the user is already authenticated
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      setAuthenticated(true);
+      return;
+    }
+
+    // If not authenticated, redirect to Keycloak login
+    try {
+      const response = await axios.get(`${apiUrl}/keycloak/login`, {
+        params: { redirect_uri: window.location.origin },
+      });
+      const redirectUrl = response.data.redirect_url;
+      window.location.href = redirectUrl;
+    } catch (error) {
+      console.error("Error during login:", error);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -108,13 +135,13 @@ const App: React.FC = () => {
       filament_id: null,
       amount_used: 0,
     });
-    navigate("/"); // Navigate to the home page
+    navigate("/");
   };
 
   const handleDelete = async (id: number) => {
     try {
       await axios.delete(`${apiUrl}/data/${id}`);
-      fetchData(); // Refresh data after deletion
+      fetchData();
     } catch (error) {
       console.error("Error deleting order:", error);
     }
@@ -161,6 +188,21 @@ const App: React.FC = () => {
         return 0;
       });
   };
+
+  if (!authenticated) {
+    return (
+      <ThemeProvider theme={theme}>
+        <Box
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          height="100vh"
+        >
+          <CircularProgress />
+        </Box>
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -216,63 +258,64 @@ const App: React.FC = () => {
                   onCancel={handleCancel}
                   onDelete={handleDelete}
                 />
-              ) : 
-              <>
-                <FilamentUsageChart />
-                <OrdersPerWeekChart />
-                {loading ? (
-                  <Box
-                    display="flex"
-                    justifyContent="center"
-                    alignItems="center"
-                    height="50vh"
-                  >
-                    <CircularProgress />
-                  </Box>
-                ) : isMobile ? (
-                  <>
-                    {sortedData().map((item) => (
-                      <OrderCard
-                        key={item.id}
-                        item={item}
-                        onEdit={handleEdit}
-                      />
-                    ))}
-                    <Fab
-                      color="primary"
-                      aria-label="filter"
-                      sx={{ position: "fixed", bottom: 16, right: 16 }}
-                      onClick={() => setFilterSortModalOpen(true)}
+              ) : (
+                <>
+                  <FilamentUsageChart />
+                  <OrdersPerWeekChart />
+                  {loading ? (
+                    <Box
+                      display="flex"
+                      justifyContent="center"
+                      alignItems="center"
+                      height="50vh"
                     >
-                      <FilterList />
-                    </Fab>
-                    <FilterSortModal
-                      open={filterSortModalOpen}
-                      onClose={() => setFilterSortModalOpen(false)}
-                      filterStatus={filterStatus}
-                      filterPaymentReceived={filterPaymentReceived}
-                      setFilterStatus={setFilterStatus}
-                      setFilterPaymentReceived={setFilterPaymentReceived}
+                      <CircularProgress />
+                    </Box>
+                  ) : isMobile ? (
+                    <>
+                      {sortedData().map((item) => (
+                        <OrderCard
+                          key={item.id}
+                          item={item}
+                          onEdit={handleEdit}
+                        />
+                      ))}
+                      <Fab
+                        color="primary"
+                        aria-label="filter"
+                        sx={{ position: "fixed", bottom: 16, right: 16 }}
+                        onClick={() => setFilterSortModalOpen(true)}
+                      >
+                        <FilterList />
+                      </Fab>
+                      <FilterSortModal
+                        open={filterSortModalOpen}
+                        onClose={() => setFilterSortModalOpen(false)}
+                        filterStatus={filterStatus}
+                        filterPaymentReceived={filterPaymentReceived}
+                        setFilterStatus={setFilterStatus}
+                        setFilterPaymentReceived={setFilterPaymentReceived}
+                        orderBy={orderBy}
+                        setOrderBy={setOrderBy}
+                        order={order}
+                        setOrder={setOrder}
+                        clearFilters={clearFilters}
+                      />
+                    </>
+                  ) : (
+                    <OrderTable
+                      data={sortedData()}
                       orderBy={orderBy}
-                      setOrderBy={setOrderBy}
                       order={order}
-                      setOrder={setOrder}
-                      clearFilters={clearFilters}
+                      handleRequestSort={handleRequestSort}
+                      handleEdit={handleEdit}
+                      setFilterStatusModalOpen={setFilterStatusModalOpen}
+                      filterPaymentReceived={filterPaymentReceived}
+                      setFilterPaymentReceived={setFilterPaymentReceived}
                     />
-                  </>
-                ) : (
-                  <OrderTable
-                    data={sortedData()}
-                    orderBy={orderBy}
-                    order={order}
-                    handleRequestSort={handleRequestSort}
-                    handleEdit={handleEdit}
-                    setFilterStatusModalOpen={setFilterStatusModalOpen}
-                    filterPaymentReceived={filterPaymentReceived}
-                    setFilterPaymentReceived={setFilterPaymentReceived}
-                  />
-                )}
-              </>
+                  )}
+                </>
+              )
             }
           />
           <Route path="/colours" element={<ColourTable />} />
